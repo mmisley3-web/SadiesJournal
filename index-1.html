@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Daily Journal</title>
+<style>
+  :root {
+    --ink: #3a3633; --muted: #8a807a; --rule: #c4453a;
+    --paper: #ffffff; --bg: #ece6df;
+    --accent: #c4453a; --tint: #f5e0cc; --tint-soft: #faf0e6;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    background: var(--bg); color: var(--ink);
+    overscroll-behavior: none;
+    /* The page never scrolls from touch — the right-side handle is the only scroller. */
+    touch-action: none;
+    transition: background .4s ease;
+    padding-top: var(--bar-h, 52px);
+  }
+  /* ---- Toolbar (collapsible) ---- */
+  .toolbar { position: fixed; top: 0; left: 0; right: 0; z-index: 70; background: rgba(255,255,255,0.97); backdrop-filter: blur(8px); border-bottom: 1px solid #ddd; }
+  .bar-min { display: flex; align-items: center; gap: 12px; padding: 8px 14px; }
+  .bar-row { display: flex; align-items: center; gap: 10px; padding: 8px 14px; flex-wrap: wrap; }
+  .toolbar button, .toolbar input { font-size: 14px; font-family: inherit; border: 1px solid #ccc; background: #fff; color: var(--ink); border-radius: 8px; padding: 8px 12px; cursor: pointer; }
+  .toolbar button.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+  #expandBtn, #collapseBtn { background: var(--tint-soft); border-color: var(--tint); font-weight: 600; }
+  #expandBtn:hover, #collapseBtn:hover { background: var(--tint); }
+  .spacer { flex: 1; }
+  .tool-group { display: flex; gap: 6px; align-items: center; }
+  .swatch { width: 26px; height: 26px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px #bbb; cursor: pointer; }
+  .swatch.sel { box-shadow: 0 0 0 2px var(--ink); }
+  .save-status { font-size: 12px; color: var(--muted); min-width: 80px; }
+  .hidden { display: none !important; }
+  .date-now { font-weight: 600; letter-spacing: 1px; }
+  .accent-dot { width:14px;height:14px;border-radius:50%;background:var(--accent); }
+
+  /* ---- Page ---- */
+  .page-wrap { padding: 18px 56px 18px 18px; display: flex; justify-content: center; }
+  .page { background: var(--paper); width: 100%; max-width: 850px; box-shadow: 0 8px 30px rgba(0,0,0,0.12); border-radius: 4px; padding: 30px 34px 40px; }
+  .head { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid var(--accent); padding-bottom: 6px; }
+  .head .month { font-size: 30px; letter-spacing: 2px; font-weight: 300; text-transform: uppercase; }
+  .head .day { font-size: 18px; letter-spacing: 2px; color: var(--muted); }
+  .head .day b { color: var(--ink); font-size: 26px; margin-left: 6px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; margin-top: 16px; }
+  .top-box { background: var(--tint); min-height: 165px; border-right: 2px solid var(--paper); display: flex; flex-direction: column; }
+  .top-box:last-child { border-right: none; }
+  .box-label { text-align: center; font-size: 12px; letter-spacing: 1.5px; color: var(--muted); padding: 10px 4px 4px; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 22px; margin-top: 26px; }
+  .sec-label { font-size: 13px; letter-spacing: 1.5px; color: var(--muted); border-bottom: 1.5px solid var(--accent); padding-bottom: 5px; margin-bottom: 4px; }
+  .canvas-host { position: relative; width: 100%; }
+  canvas { display: block; width: 100%; border-radius: 2px; touch-action: none; }
+  .emo-box { background: var(--tint); margin-top: 4px; }
+  .emo-wrap { border-top: 2px solid var(--accent); margin-top: 24px; padding-top: 4px; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 10px 0 40px; }
+
+  /* ---- Right-side scroll handle (the only way to scroll) ---- */
+  .scroll-rail {
+    position: fixed; top: var(--bar-h, 52px); right: 0; width: 46px; height: calc(100% - var(--bar-h, 52px));
+    z-index: 60; touch-action: none;
+    background: linear-gradient(90deg, rgba(0,0,0,0.04), rgba(0,0,0,0.10));
+    border-left: 1px solid rgba(0,0,0,0.08);
+    display: flex; align-items: stretch; justify-content: center;
+  }
+  .scroll-track { position: relative; width: 100%; }
+  .scroll-thumb {
+    position: absolute; left: 6px; right: 6px;
+    background: var(--accent); border-radius: 18px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    display: flex; align-items: center; justify-content: center;
+    cursor: grab; touch-action: none;
+  }
+  .scroll-thumb::before { content: "⋮⋮"; writing-mode: vertical-rl; color: #fff; font-size: 11px; letter-spacing: -2px; opacity: 0.9; }
+  .scroll-thumb:active { cursor: grabbing; }
+  .rail-label { position: fixed; right: 50px; bottom: 14px; font-size: 11px; color: var(--muted); background: rgba(255,255,255,0.8); padding: 3px 7px; border-radius: 6px; z-index: 60; pointer-events: none; }
+
+  @media (max-width: 640px) {
+    .cols { grid-template-columns: 1fr; }
+    .page { padding: 20px 18px 30px; }
+    .head .month { font-size: 24px; }
+  }
+</style>
+</head>
+<body>
+  <div class="toolbar">
+    <div class="bar-min" id="barMin">
+      <span class="accent-dot"></span>
+      <span class="date-now" id="miniDate">—</span>
+      <span class="spacer"></span>
+      <span class="save-status" id="statusMini">Saved</span>
+      <button id="expandBtn">⌄ Tools</button>
+    </div>
+    <div id="barFull" class="hidden">
+      <div class="bar-row">
+        <button id="prevDay">‹</button>
+        <input type="date" id="datePick">
+        <button id="nextDay">›</button>
+        <button id="today">Today</button>
+        <div class="spacer"></div>
+        <button id="collapseBtn">⌃ Hide</button>
+      </div>
+      <div class="bar-row">
+        <div class="tool-group">
+          <button id="penBtn" class="active">✏️ Pen</button>
+          <button id="eraserBtn">⌫ Erase</button>
+        </div>
+        <div class="tool-group" id="swatches"></div>
+        <input type="range" id="sizeRange" min="1" max="14" value="3" style="width:90px" title="Pen size">
+        <span class="save-status" id="status">Saved</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-wrap">
+    <div class="page" id="page">
+      <div class="head">
+        <span class="month" id="monthLbl">JUNE</span>
+        <span class="day" id="dayLbl">TUE <b>02</b></span>
+      </div>
+      <div class="grid3">
+        <div class="top-box"><div class="box-label">YESTERDAY'S WIN</div><div class="canvas-host" data-sec="win" data-bg="tint"></div></div>
+        <div class="top-box"><div class="box-label">ME AND JEHOVAH</div><div class="canvas-host" data-sec="jehovah" data-bg="tint"></div></div>
+        <div class="top-box"><div class="box-label">MOOD TRACKER</div><div class="canvas-host" data-sec="mood" data-bg="tint"></div></div>
+      </div>
+      <div class="cols">
+        <div>
+          <div class="sec-label">TODAY</div>
+          <div class="canvas-host" data-sec="today" data-lines="hours"></div>
+        </div>
+        <div>
+          <div class="sec-label">GRATITUDE</div>
+          <div class="canvas-host" data-sec="gratitude" data-lines="ruled" data-rows="5"></div>
+          <div class="sec-label" style="margin-top:18px">AFFIRMATIONS</div>
+          <div class="canvas-host" data-sec="affirm" data-lines="ruled" data-rows="5"></div>
+          <div class="emo-wrap">
+            <div class="sec-label" style="border:none;color:var(--muted)">EMOTIONAL GOAL</div>
+            <div class="canvas-host emo-box" data-sec="emotion" data-bg="tint" data-h="150"></div>
+          </div>
+        </div>
+        <div>
+          <div class="sec-label">CHECKLIST</div>
+          <div class="canvas-host" data-sec="checklist" data-lines="bullets" data-rows="12"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer>Handwritten daily journal · saved on this device</footer>
+
+  <!-- Scroll handle: the sole way to scroll -->
+  <div class="scroll-rail" id="scrollRail">
+    <div class="scroll-track" id="scrollTrack">
+      <div class="scroll-thumb" id="scrollThumb"></div>
+    </div>
+  </div>
+  <div class="rail-label">drag to scroll →</div>
+
+<script>
+/* ====== MONTHLY PASTEL THEMES ====== */
+const THEMES = {
+  0:{accent:'#5b6bb5',tint:'#dfe3f5',soft:'#eef0fa'}, 1:{accent:'#7e6db0',tint:'#e6def0',soft:'#f1ecf8'},
+  2:{accent:'#9a6fa8',tint:'#ecdef0',soft:'#f5ecf7'}, 3:{accent:'#d68a4e',tint:'#f6e3cf',soft:'#fbf1e6'},
+  4:{accent:'#d96a52',tint:'#f6dad1',soft:'#fbeae4'}, 5:{accent:'#5fa777',tint:'#dcefe0',soft:'#ecf8ef'},
+  6:{accent:'#4fa3a0',tint:'#d6efed',soft:'#e9f7f6'}, 7:{accent:'#4f93c4',tint:'#d6e8f5',soft:'#e9f3fa'},
+  8:{accent:'#c98aa8',tint:'#f3dde8',soft:'#faecf2'}, 9:{accent:'#c06a4a',tint:'#f2dacc',soft:'#f9ebe2'},
+  10:{accent:'#a98c5a',tint:'#efe6d2',soft:'#f7f1e4'}, 11:{accent:'#6a8bb0',tint:'#dde7f2',soft:'#edf2f8'},
+};
+function applyTheme(m){const t=THEMES[m]||THEMES[5];const r=document.documentElement.style;
+  r.setProperty('--accent',t.accent);r.setProperty('--tint',t.tint);r.setProperty('--tint-soft',t.soft);
+  r.setProperty('--bg',mix(t.tint,'#ece6df'));}
+function mix(a,b){const pa=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
+  const x=pa(a),y=pa(b);return '#'+x.map((v,i)=>Math.round((v+y[i])/2).toString(16).padStart(2,'0')).join('');}
+
+/* ====== STATE ====== */
+const HOURS={startHour:7,endHour:17};
+let penColor='#1f3a5f',penSize=3,mode='pen';
+let currentDate=isoDate(new Date());
+const canvases={}; let dirty=false;
+const COLORS=['#1f3a5f','#3a3633','#c4453a','#2e7d52','#7b4ea0'];
+
+/* ====== INDEXEDDB ====== */
+let db;
+function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('DailyJournal',1);
+  r.onupgradeneeded=e=>e.target.result.createObjectStore('days',{keyPath:'date'});
+  r.onsuccess=e=>{db=e.target.result;res();};r.onerror=rej;});}
+function loadDay(d){return new Promise(res=>{const t=db.transaction('days','readonly').objectStore('days').get(d);
+  t.onsuccess=()=>res(t.result||null);t.onerror=()=>res(null);});}
+function saveDay(d,s){return new Promise((res,rej)=>{const t=db.transaction('days','readwrite').objectStore('days').put({date:d,sections:s,updated:Date.now()});
+  t.onsuccess=res;t.onerror=rej;});}
+
+/* ====== HELPERS ====== */
+function isoDate(d){return d.toISOString().slice(0,10);}
+function parseISO(s){const[y,m,dd]=s.split('-').map(Number);return new Date(y,m-1,dd);}
+
+/* ====== CANVAS ====== */
+function hostHeight(h){
+  if(h.dataset.h) return +h.dataset.h;
+  if(h.dataset.lines==='hours') return (HOURS.endHour-HOURS.startHour+1)*56;
+  if(h.dataset.lines==='ruled') return (+h.dataset.rows||5)*40;
+  if(h.dataset.lines==='bullets') return (+h.dataset.rows||12)*30;
+  return 150;
+}
+function line(ctx,x1,y1,x2,y2,c){ctx.strokeStyle=c||'#d8d2cc';ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();}
+function drawGuides(ctx,host,w,h){
+  ctx.clearRect(0,0,w,h);
+  const tint=getComputedStyle(document.documentElement).getPropertyValue('--tint').trim();
+  if(host.dataset.bg==='tint'){ctx.fillStyle=tint;ctx.fillRect(0,0,w,h);}
+  ctx.lineWidth=1;ctx.fillStyle='#b0a89f';ctx.font='12px Helvetica Neue, Arial';
+  if(host.dataset.lines==='hours'){const rowH=56;let y=28;
+    for(let hr=HOURS.startHour;hr<=HOURS.endHour;hr++){let label=hr===0?'12':(hr===12?'12':(hr>12?hr-12:hr));
+      ctx.fillText(label,2,y-4);line(ctx,26,y,w,y);line(ctx,0,y+rowH/2,w,y+rowH/2,'#e8e3dd');y+=rowH;}}
+  else if(host.dataset.lines==='ruled'){const rows=+host.dataset.rows||5,rowH=40;
+    for(let i=1;i<=rows;i++) line(ctx,0,i*rowH,w,i*rowH);}
+  else if(host.dataset.lines==='bullets'){const rows=+host.dataset.rows||12,rowH=30;
+    for(let i=0;i<rows;i++){const y=i*rowH+20;ctx.fillStyle='#d8a878';ctx.beginPath();ctx.arc(6,y-4,3,0,7);ctx.fill();line(ctx,16,y,w,y);}}
+}
+function buildCanvases(){
+  document.querySelectorAll('.canvas-host').forEach(host=>{
+    host.innerHTML='';
+    const sec=host.dataset.sec,dpr=window.devicePixelRatio||1;
+    const w=host.clientWidth||240,h=hostHeight(host);
+    const guide=document.createElement('canvas'),ink=document.createElement('canvas');
+    [guide,ink].forEach(c=>{c.width=w*dpr;c.height=h*dpr;c.style.width=w+'px';c.style.height=h+'px';
+      c.style.position='absolute';c.style.left=0;c.style.top=0;c.getContext('2d').scale(dpr,dpr);});
+    guide.style.zIndex=0;ink.style.zIndex=1;
+    host.style.height=h+'px';host.appendChild(guide);host.appendChild(ink);
+    drawGuides(guide.getContext('2d'),host,w,h);
+    const ctx=ink.getContext('2d');ctx.lineCap='round';ctx.lineJoin='round';
+    canvases[sec]={host,ink,ctx,w,h};
+    attachDrawing(sec);
+  });
+}
+
+/* ====== DRAWING (original simple behavior — any pointer draws) ====== */
+function attachDrawing(sec){
+  const o=canvases[sec],c=o.ink;let drawing=false,lastX=0,lastY=0;
+  const pos=e=>{const r=c.getBoundingClientRect();const t=e.touches?e.touches[0]:e;
+    return {x:t.clientX-r.left,y:t.clientY-r.top,p:(t.force||e.pressure||0.5)};};
+  const start=e=>{drawing=true;const{x,y}=pos(e);lastX=x;lastY=y;e.preventDefault();};
+  const move=e=>{if(!drawing)return;e.preventDefault();const{x,y,p}=pos(e),ctx=o.ctx;
+    if(mode==='eraser'){ctx.save();ctx.globalCompositeOperation='destination-out';ctx.lineWidth=penSize*6;
+      ctx.beginPath();ctx.moveTo(lastX,lastY);ctx.lineTo(x,y);ctx.stroke();ctx.restore();}
+    else{ctx.globalCompositeOperation='source-over';ctx.strokeStyle=penColor;ctx.lineWidth=penSize*(0.5+p);
+      ctx.beginPath();ctx.moveTo(lastX,lastY);ctx.lineTo(x,y);ctx.stroke();}
+    lastX=x;lastY=y;markDirty();};
+  const end=()=>{if(drawing){drawing=false;scheduleSave();}};
+  c.addEventListener('pointerdown',start);
+  c.addEventListener('pointermove',move);
+  window.addEventListener('pointerup',end);
+}
+
+/* ====== SAVE/LOAD ====== */
+let saveTimer;
+function markDirty(){dirty=true;setStatus('Unsaved…');}
+function scheduleSave(){clearTimeout(saveTimer);saveTimer=setTimeout(persist,700);}
+async function persist(){if(!dirty)return;const sections={};
+  for(const s in canvases) sections[s]=canvases[s].ink.toDataURL('image/png');
+  await saveDay(currentDate,sections);dirty=false;setStatus('Saved ✓');}
+function setStatus(t){document.getElementById('status').textContent=t;document.getElementById('statusMini').textContent=t;}
+
+async function renderDate(date){
+  if(dirty) await persist();
+  currentDate=date;
+  document.getElementById('datePick').value=date;
+  const d=parseISO(date);applyTheme(d.getMonth());
+  document.getElementById('monthLbl').textContent=d.toLocaleString('en',{month:'long'}).toUpperCase();
+  document.getElementById('dayLbl').innerHTML=d.toLocaleString('en',{weekday:'short'}).toUpperCase()+' <b>'+String(d.getDate()).padStart(2,'0')+'</b>';
+  document.getElementById('miniDate').textContent=d.toLocaleString('en',{weekday:'short',month:'short',day:'numeric'});
+  buildCanvases();
+  const saved=await loadDay(date);
+  if(saved&&saved.sections){for(const s in saved.sections){if(!canvases[s])continue;
+    const img=new Image();img.onload=()=>canvases[s].ctx.drawImage(img,0,0,canvases[s].w,canvases[s].h);img.src=saved.sections[s];}
+    setStatus('Saved ✓');}
+  else setStatus('New page');
+  setTimeout(updateThumb,50);
+}
+
+/* ====== RIGHT-SIDE SCROLL HANDLE ====== */
+const track=document.getElementById('scrollTrack');
+const thumb=document.getElementById('scrollThumb');
+function scrollMetrics(){
+  const doc=document.documentElement;
+  const maxScroll=Math.max(1, doc.scrollHeight - window.innerHeight);
+  const trackH=track.clientHeight;
+  const thumbH=Math.max(48, trackH * (window.innerHeight / doc.scrollHeight));
+  return {maxScroll, trackH, thumbH};
+}
+function updateThumb(){
+  const {maxScroll,trackH,thumbH}=scrollMetrics();
+  thumb.style.height=thumbH+'px';
+  const ratio=window.scrollY/maxScroll;
+  thumb.style.top=(ratio*(trackH-thumbH))+'px';
+}
+let dragging=false,dragOffset=0;
+thumb.addEventListener('pointerdown',e=>{dragging=true;dragOffset=e.clientY-thumb.getBoundingClientRect().top;
+  thumb.setPointerCapture(e.pointerId);e.preventDefault();});
+window.addEventListener('pointermove',e=>{if(!dragging)return;e.preventDefault();
+  const {maxScroll,trackH,thumbH}=scrollMetrics();
+  const trackTop=track.getBoundingClientRect().top;
+  let y=e.clientY-trackTop-dragOffset;
+  y=Math.max(0,Math.min(trackH-thumbH,y));
+  const ratio=y/(trackH-thumbH);
+  window.scrollTo(0, ratio*maxScroll);
+  thumb.style.top=y+'px';});
+window.addEventListener('pointerup',()=>{dragging=false;});
+// tap on the rail track to jump-scroll
+track.addEventListener('pointerdown',e=>{if(e.target===thumb)return;
+  const {maxScroll,trackH,thumbH}=scrollMetrics();
+  const trackTop=track.getBoundingClientRect().top;
+  let y=e.clientY-trackTop-thumbH/2;y=Math.max(0,Math.min(trackH-thumbH,y));
+  window.scrollTo({top:(y/(trackH-thumbH))*maxScroll,behavior:'smooth'});});
+window.addEventListener('scroll',updateThumb,{passive:true});
+window.addEventListener('resize',()=>{updateThumb();});
+// allow mouse wheel / keyboard / trackpad as well (desktop convenience)
+
+/* ====== TOOLBAR ====== */
+function buildSwatches(){const wrap=document.getElementById('swatches');
+  COLORS.forEach((col,i)=>{const s=document.createElement('div');s.className='swatch'+(i===0?' sel':'');s.style.background=col;
+    s.onclick=()=>{penColor=col;mode='pen';setActive('penBtn');
+      document.querySelectorAll('.swatch').forEach(x=>x.classList.remove('sel'));s.classList.add('sel');};
+    wrap.appendChild(s);});}
+function setActive(id){['penBtn','eraserBtn'].forEach(b=>document.getElementById(b).classList.toggle('active',b===id));}
+function syncBarHeight(){
+  const h=document.querySelector('.toolbar').offsetHeight;
+  document.documentElement.style.setProperty('--bar-h', h+'px');
+  setTimeout(updateThumb,30);
+}
+document.getElementById('expandBtn').onclick=()=>{document.getElementById('barFull').classList.remove('hidden');document.getElementById('barMin').classList.add('hidden');syncBarHeight();};
+document.getElementById('collapseBtn').onclick=()=>{document.getElementById('barFull').classList.add('hidden');document.getElementById('barMin').classList.remove('hidden');syncBarHeight();};
+document.getElementById('penBtn').onclick=()=>{mode='pen';setActive('penBtn');};
+document.getElementById('eraserBtn').onclick=()=>{mode='eraser';setActive('eraserBtn');};
+document.getElementById('sizeRange').oninput=e=>penSize=+e.target.value;
+document.getElementById('datePick').onchange=e=>renderDate(e.target.value);
+document.getElementById('today').onclick=()=>renderDate(isoDate(new Date()));
+document.getElementById('prevDay').onclick=()=>{const d=parseISO(currentDate);d.setDate(d.getDate()-1);renderDate(isoDate(d));};
+document.getElementById('nextDay').onclick=()=>{const d=parseISO(currentDate);d.setDate(d.getDate()+1);renderDate(isoDate(d));};
+window.addEventListener('beforeunload',()=>{if(dirty)persist();});
+
+/* ====== BOOT ====== */
+(async function(){buildSwatches();await openDB();await renderDate(currentDate);syncBarHeight();updateThumb();})();
+window.addEventListener('resize',syncBarHeight);
+</script>
+</body>
+</html>
